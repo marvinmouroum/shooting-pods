@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Shooting Pods 3D — 2 längliche Bahnen à 25 m²</title>
+<style>
+  body { margin:0; overflow:hidden; font-family:-apple-system,Arial,sans-serif; background:#111; }
+  #info { position:fixed; top:12px; left:12px; color:#fff; background:rgba(0,0,0,.55); padding:10px 14px; border-radius:10px; font-size:13px; line-height:1.5; z-index:10; }
+  #info b { color:#ff922b; }
+  canvas { display:block; }
+  #legend { position:fixed; bottom:12px; left:12px; color:#ddd; background:rgba(0,0,0,.55); padding:8px 12px; border-radius:10px; font-size:11px; z-index:10; }
+</style>
+</head>
+<body>
+<div id="info"><b>🏀 Shooting Lanes — 3D (2× ~25 m² Bahnen)</b><br>10 m lange, 2,7 m breite Wurfbahnen · FT + Top-3er passen · Maus ziehen = drehen · Scrollen = zoomen</div>
+<div id="legend">Orange: Körbe · Blau: Rebound-Maschinen · Grün: CV-Kameras · Violett: Umziehecke (kamerafrei) · Gelb: Ballregal · Grau: Monitor + Ladestation</div>
+<script src="three.min.js"></script>
+<script src="OrbitControls-global.js"></script>
+<script>
+// Scale: 1 unit = 1 m. Room: 5.5 m wide (x) × 10 m deep (z), 5 m ceiling. Total 55 m².
+// Two lanes: each ~2.7 m wide (x: -2.75..-0.05 and 0.05..2.75), 8.5 m shooting length + shared front zone.
+var R = { w:5.5, d:10, h:5 };
+
+var scene = new THREE.Scene();
+scene.background = new THREE.Color(0x15181e);
+
+// Floor
+var floor = new THREE.Mesh(new THREE.BoxGeometry(R.w, .1, R.d), new THREE.MeshStandardMaterial({ color:0xc9a26a, roughness:.9 }));
+floor.position.y = -.05; scene.add(floor);
+
+// Court markings per lane: FT line (4.6m from hoop), 3pt mark (7.25m from hoop)
+// Hoop front rim sits at z = -R.d/2 + 0.7 ≈ -4.3. FT line: z = -4.3 + 4.6 = 0.3 ; 3pt: z = 3.0
+function laneLine(w,d,x,z,color){
+  var m = new THREE.Mesh(new THREE.BoxGeometry(w,.006,d), new THREE.MeshBasicMaterial({color:color||0xf1e4c3}));
+  m.position.set(x,.012,z); scene.add(m);
+}
+[-1.4, 1.4].forEach(function(x){
+  laneLine(2.4,.06, x, 0.3);            // Freiwurflinie
+  laneLine(2.4,.06, x, 3.0, 0xffa94d);  // Top-of-the-Key 3er
+  laneLine(.06,2.7, x-1.15, 1.6);       // key side hint
+  laneLine(.06,2.7, x+1.15, 1.6);
+});
+
+// Walls
+var wallMat = new THREE.MeshStandardMaterial({ color:0x2b3440, roughness:.95, transparent:true, opacity:.45, side:THREE.DoubleSide });
+function mkWall(w,h,x,z,ry){
+  var m = new THREE.Mesh(new THREE.BoxGeometry(w,h,.15),wallMat);
+  m.position.set(x,h/2,z); if(ry) m.rotation.y=ry; scene.add(m);
+}
+mkWall(R.w, R.h, 0, -R.d/2);            // back wall (hoops)
+mkWall(R.w, R.h, 0,  R.d/2);            // entrance wall
+mkWall(R.d, R.h, -R.w/2, 0, Math.PI/2); // left
+mkWall(R.d, R.h,  R.w/2, 0, Math.PI/2); // right
+
+// Divider wall between lanes (runs along z)
+var divider = new THREE.Mesh(new THREE.BoxGeometry(.1, R.h, R.d-1.5), new THREE.MeshStandardMaterial({color:0x495057, roughness:.9}));
+divider.position.set(0, R.h/2, -0.75); scene.add(divider);
+
+// Hoops at end of each lane
+function hoop(x){
+  var g = new THREE.Group();
+  var board = new THREE.Mesh(new THREE.BoxGeometry(1.8,1.05,.06), new THREE.MeshStandardMaterial({color:0xf8f9fa, roughness:.4}));
+  board.position.set(0, 3.05, .1); g.add(board);
+  var rim = new THREE.Mesh(new THREE.TorusGeometry(.23,.02,12,32), new THREE.MeshStandardMaterial({color:0xff6b00, metalness:.6, roughness:.3}));
+  rim.rotation.x = Math.PI/2; rim.position.set(0, 2.575, .55); g.add(rim);
+  var net = new THREE.Mesh(new THREE.ConeGeometry(.2,.4,12,1,true), new THREE.MeshStandardMaterial({color:0xffffff, wireframe:true}));
+  net.position.set(0,2.37,.55); g.add(net);
+  g.position.set(x, 0, -R.d/2 + .12);
+  scene.add(g);
+}
+hoop(-1.4); hoop(1.4);
+
+// Rebound machines in each lane
+function machine(x){
+  var g = new THREE.Group();
+  var body = new THREE.Mesh(new THREE.BoxGeometry(1.2,1.1,.9), new THREE.MeshStandardMaterial({color:0x1971c2, roughness:.6}));
+  body.position.y=.85; g.add(body);
+  var screen = new THREE.Mesh(new THREE.BoxGeometry(1.0,.5,.05), new THREE.MeshStandardMaterial({color:0x0b3d70, emissive:0x0d3a61, roughness:.4}));
+  screen.position.set(0,1.35,.2); screen.rotation.x=-.5; g.add(screen);
+  var chute = new THREE.Mesh(new THREE.BoxGeometry(.5,.5,.5), new THREE.MeshStandardMaterial({color:0x1c7ed6, roughness:.6}));
+  chute.position.set(0,.5,.9); g.add(chute);
+  g.position.set(x, 0, -R.d/2+1.4);
+  scene.add(g);
+}
+machine(-1.4); machine(1.4);
+
+// CV cameras above back wall corners, looking down the lanes
+function cam(x,z,ry){
+  var g = new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(.35,.2,.3), new THREE.MeshStandardMaterial({color:0x2b8a3e})));
+  var lens = new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,.1,16), new THREE.MeshStandardMaterial({color:0x111111, metalness:.7}));
+  lens.rotation.x = Math.PI/2; lens.position.z=.2; g.add(lens);
+  g.position.set(x, 4.6, z); g.rotation.y = ry;
+  scene.add(g);
+}
+cam(-2.5,-4.4,.35); cam(2.5,-4.4,-.35);
+
+// Shared front zone (z ≈ 3.6..4.8): changing corner, rack, monitor, station, benches
+var cab = new THREE.Mesh(new THREE.BoxGeometry(1.5,2.2,1.1), new THREE.MeshStandardMaterial({color:0x3b3b4f, roughness:.95}));
+cab.position.set(-2.1, 1.1, 4.15); scene.add(cab);
+var curtain = new THREE.Mesh(new THREE.BoxGeometry(1.4,2.1,.05), new THREE.MeshStandardMaterial({color:0x6741d9, roughness:.9, transparent:true, opacity:.55}));
+curtain.position.set(-2.05, 1.08, 3.55); scene.add(curtain);
+
+var rack = new THREE.Mesh(new THREE.BoxGeometry(2.0,.95,.55), new THREE.MeshStandardMaterial({color:0xf0b400, metalness:.3, roughness:.5}));
+rack.position.set(1.9,.48,4.2); scene.add(rack);
+for(var i=0;i<6;i++){
+  var ball = new THREE.Mesh(new THREE.SphereGeometry(.12,16,16), new THREE.MeshStandardMaterial({color:0xe8590c, roughness:.7}));
+  ball.position.set(1.9-0.8+(i%3)*0.8, .98, 4.2 + (i<3?-0.1:0.1));
+  scene.add(ball);
+}
+
+var mon = new THREE.Mesh(new THREE.BoxGeometry(1.7,1.0,.08), new THREE.MeshStandardMaterial({color:0x212529, emissive:0x22303f, roughness:.4}));
+mon.position.set(0,2.3, R.d/2-.15); scene.add(mon);
+var scr = new THREE.Mesh(new THREE.BoxGeometry(1.55,.85,.02), new THREE.MeshBasicMaterial({color:0x1c9c74}));
+scr.position.set(0,2.3, R.d/2-.19); scene.add(scr);
+
+var station = new THREE.Mesh(new THREE.BoxGeometry(.75,.95,.5), new THREE.MeshStandardMaterial({color:0x868e96, roughness:.7}));
+station.position.set(2.2,.48,3.5); scene.add(station);
+var phone = new THREE.Mesh(new THREE.BoxGeometry(.08,.16,.02), new THREE.MeshStandardMaterial({color:0x111111}));
+phone.position.set(2.2,1.03,3.4); phone.rotation.y=.4; scene.add(phone);
+
+var door = new THREE.Mesh(new THREE.BoxGeometry(1.0,2.1,.08), new THREE.MeshStandardMaterial({color:0x0c8599, roughness:.6}));
+door.position.set(-1.0,1.05,R.d/2-.1); scene.add(door);
+
+// Benches along front zone
+var benchMat = new THREE.MeshStandardMaterial({color:0x495057, roughness:.8});
+[-0.7].forEach(function(x){
+  var b=new THREE.Mesh(new THREE.BoxGeometry(1.6,.08,.4),benchMat); b.position.set(x,.45,4.3); scene.add(b);
+  var l1=new THREE.Mesh(new THREE.BoxGeometry(.08,.45,.4),benchMat); l1.position.set(x-.7,.22,4.3); scene.add(l1);
+  var l2=l1.clone(); l2.position.x=x+.7; scene.add(l2);
+});
+
+// Labels
+function labelSprite(text,fg,scale,pos){
+  var c=document.createElement('canvas'); c.width=512;c.height=128;
+  var x=c.getContext('2d'); x.font='bold 56px sans-serif'; x.fillStyle=fg; x.textAlign='center'; x.fillText(text,256,82);
+  var t=new THREE.CanvasTexture(c);
+  var sp=new THREE.Sprite(new THREE.SpriteMaterial({map:t, transparent:true}));
+  sp.scale.set(scale[0],scale[1],1); sp.position.set(pos[0],pos[1],pos[2]); scene.add(sp);
+}
+labelSprite('Lane 1 — frontal','#74c0fc',[2.4,.6],[-1.4,4.4,-2]);
+labelSprite('Lane 2 — frontal','#74c0fc',[2.4,.6],[1.4,4.4,-2]);
+labelSprite('3er · 7,25 m','#ffa94d',[1.7,.42],[0,.15,3.0]);
+labelSprite('FT · 4,60 m','#f1e4c3',[1.6,.4],[0,.15,0.3]);
+labelSprite('Umziehen','#b197fc',[1.8,.45],[-2.1,2.8,4.0]);
+labelSprite('Ballregal','#ffd43b',[1.7,.42],[1.9,1.5,4.2]);
+labelSprite('Leaderboard','#38d9a9',[1.8,.45],[0,3.05,R.d/2-.2]);
+labelSprite('Laden + Filmen','#ced4da',[1.9,.48],[2.2,1.45,3.5]);
+labelSprite('Smart Lock','#66d9e8',[1.5,.38],[-1.0,2.35,R.d/2-.2]);
+
+// Lights
+scene.add(new THREE.AmbientLight(0xffffff,.6));
+var key = new THREE.DirectionalLight(0xffffff,.9); key.position.set(6,10,6); scene.add(key);
+var fill = new THREE.PointLight(0xffe8cc,.5); fill.position.set(-4,4,4); scene.add(fill);
+
+// Camera + controls
+var camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, .1, 100);
+camera.position.set(9, 7, 10);
+var renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio || 1);
+document.body.appendChild(renderer.domElement);
+var controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.target.set(0,1.5,0);
+controls.enableDamping = true; controls.dampingFactor = .08;
+controls.maxPolarAngle = Math.PI/2.05;
+window.addEventListener('resize',function(){ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+(function animate(){ requestAnimationFrame(animate); controls.update(); renderer.render(scene,camera); })();
+</script>
+</body>
+</html>
