@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<title>Shooting Lanes 3D — FIBA-Maße, 84 m²</title>
+<title>Shooting Lanes 3D — FIBA-Maße, 132 m²</title>
 <style>
   body { margin:0; overflow:hidden; font-family:-apple-system,Arial,sans-serif; background:#111; }
   #info { position:fixed; top:12px; left:12px; color:#fff; background:rgba(0,0,0,.55); padding:10px 14px; border-radius:10px; font-size:13px; line-height:1.5; z-index:10; }
@@ -12,19 +12,19 @@
 </style>
 </head>
 <body>
-<div id="info"><b>🏀 Shooting Lanes — 84 m² (7 × 12 m)</b><br>2 Bahnen je 3,3 × 10 m · 3er mit Anlaufraum · Ziehen = drehen · Scrollen = zoomen</div>
-<div id="legend">FIBA: Brett 1,80×1,05 · Ring ⌀ 45 cm / 3,05 m · Zone 5,80×4,90 · FT 5,80 m · 3er 6,75 m · Ball Size 7 ⌀ 24,3 cm. Kreisbögen (FT-Kreis, No-charge, 3er-Bogen) wölben sich vom Korb weg. Netz schmal nach unten.</div>
+<div id="info"><b>🏀 Shooting Lanes — 132 m² (11 × 12 m)</b><br>2 Bahnen je 5,3 × 10 m (volle FIBA-Zone passt) · Ziehen = drehen · Scrollen = zoomen</div>
+<div id="legend">FIBA: Brett 1,80×1,05 · Ring ⌀ 45 cm / 3,05 m · Zone 4,90×5,80 m (passt komplett in die Lane!) · FT 5,80 m · FT-Kreis r 1,80 · No-charge r 1,25 · 3er 6,75 m · Ball Size 7 ⌀ 24,3 cm. Weiß = Freiwurf/Zone · Orange = Dreier.</div>
 <script src="three.min.js"></script>
 <script src="OrbitControls-global.js"></script>
 <script>
-// Scale: 1 unit = 1 m. Room 7 m wide (x) × 12 m deep (z), 5 m ceiling.
-var R = { w:7, d:12, h:5 };
-var LANE_X = [-1.75, 1.75];   // lane centers
-var LANE_HW = 1.65;           // lane half-width (3.3 m lanes)
-var END = -R.d/2;             // end wall z = -6
-var RIM_Z = END + 1.575;      // rim center z = -4.425
-var FT_Z  = END + 5.80;       // FT line z = -0.2
-var TP_APEX = RIM_Z + 6.75;   // 3pt arc apex z = 2.325
+// Scale: 1 unit = 1 m. Room 11 m wide (x) × 12 m deep (z), 5 m ceiling = 132 m².
+var R = { w:11, d:12, h:5 };
+var LANE_X = [-2.85, 2.85];  // lane centers (5.3 m lanes + 0.4 divider gap)
+var LANE_HW = 2.65;          // lane half-width
+var END = -R.d/2;            // end wall z = -6
+var RIM_Z = END + 1.575;     // rim center z = -4.425
+var FT_Z  = END + 5.80;      // FT line z = -0.2
+var TP_APEX = RIM_Z + 6.75;  // 3pt arc apex z = 2.325
 
 var scene = new THREE.Scene();
 scene.background = new THREE.Color(0x15181e);
@@ -36,31 +36,44 @@ function mark(w,d,x,z,color){
   var m = new THREE.Mesh(new THREE.BoxGeometry(w,.006,d), new THREE.MeshBasicMaterial({color:color||0xffffff}));
   m.position.set(x, .012, z); scene.add(m); return m;
 }
-// Arc bulging toward +z (away from hoop): after rotation.x=-PI/2, use t in PI..2PI
-function arc(rIn,rOut,x,z,startA,endA,color){
-  var g = new THREE.RingGeometry(rIn,rOut,48,1,startA,endA);
-  var m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({color:color||0xffffff, side:THREE.DoubleSide}));
-  m.rotation.x = -Math.PI/2; m.position.set(x,.012,z); scene.add(m); return m;
+// Arc made of short floor segments, clipped to given angle range.
+// Point = (cx + r*sin(a), cz + r*cos(a)); a=0 bulges toward +z (away from hoop).
+function arcSegments(cx, cz, r, a0, a1, color){
+  var steps = Math.max(10, Math.ceil(Math.abs(a1-a0)/0.04));
+  var prev = null;
+  for(var i=0;i<=steps;i++){
+    var a = a0 + (a1-a0)*i/steps;
+    var px = cx + r*Math.sin(a), pz = cz + r*Math.cos(a);
+    if(prev){
+      var dx=px-prev[0], dz=pz-prev[1];
+      var len=Math.sqrt(dx*dx+dz*dz);
+      var m=new THREE.Mesh(new THREE.BoxGeometry(len,.006,.06), new THREE.MeshBasicMaterial({color:color||0xffffff}));
+      m.position.set((px+prev[0])/2,.012,(pz+prev[1])/2);
+      m.rotation.y = -Math.atan2(dz,dx);
+      scene.add(m);
+    }
+    prev=[px,pz];
+  }
 }
 
 LANE_X.forEach(function(x){
   // Baseline
-  mark(3.2,.05, x, END+0.03);
-  // Zone: FIBA 5.80 long; width clipped to lane (true FIBA width 4.90 m > lane 3.3 m)
-  mark(3.2,.05, x, FT_Z);                    // zone front = FT line
-  mark(.05,5.80, x-LANE_HW+0.05, END+2.90);  // zone edge left
-  mark(.05,5.80, x+LANE_HW-0.05, END+2.90);  // zone edge right
-  // FT circle r=1.80 bulging away from hoop
-  arc(1.77,1.83, x, FT_Z, Math.PI, Math.PI*2);
-  // Restricted area r=1.25 around rim, bulging toward FT
-  arc(1.22,1.28, x, RIM_Z, Math.PI, Math.PI*2);
-  // 3-point arc r=6.75 around rim center, clipped to lane half-width
-  var half = Math.atan((LANE_HW-0.05)/6.75);
-  arc(6.72,6.78, x, RIM_Z, Math.PI+half, Math.PI*2-half, 0xffa94d);
-  // straight 3pt corner stubs (from arc ends to end wall)
-  var stubZ = RIM_Z + 6.75*Math.cos(half);
-  mark(.05, END - stubZ + 0.1 + (stubZ- (END+0.06)), x-LANE_HW+0.05, (stubZ+END+0.06)/2, 0xffa94d); // left
-  mark(.05, stubZ-(END+0.06), x+LANE_HW-0.05, (stubZ+END+0.06)/2, 0xffa94d); // right
+  mark(5.2,.05, x, END+0.04);
+  // FIBA Zone: 4.90 m wide × 5.80 m deep — fits fully in 5.3 m lane
+  mark(4.90,.05, x, FT_Z);                     // zone front = FT line
+  mark(.05,5.80, x-2.45, END+2.90);            // zone edge left
+  mark(.05,5.80, x+2.45, END+2.90);            // zone edge right
+  // FT circle r=1.80: semicircle bulging away from hoop (fits: 1.80 < 2.45)
+  arcSegments(x, FT_Z, 1.80, -Math.PI/2, Math.PI/2, 0xffffff);
+  // No-charge semicircle r=1.25 around rim
+  arcSegments(x, RIM_Z, 1.25, -Math.PI/2, Math.PI/2, 0xffffff);
+  // 3-point arc r=6.75 around rim center, clipped at lane edges
+  var aMax = Math.asin((LANE_HW-0.1)/6.75);
+  arcSegments(x, RIM_Z, 6.75, -aMax, aMax, 0xffa94d);
+  // straight corner stubs from arc ends down to baseline
+  var endZ = RIM_Z + 6.75*Math.cos(aMax);
+  mark(.05, endZ-(END+0.06), x-(LANE_HW-0.1), (endZ+END+0.06)/2, 0xffa94d);
+  mark(.05, endZ-(END+0.06), x+(LANE_HW-0.1), (endZ+END+0.06)/2, 0xffa94d);
 });
 
 // Walls
@@ -74,7 +87,7 @@ mkWall(R.w, R.h, 0,  R.d/2);
 mkWall(R.d, R.h, -R.w/2, 0, Math.PI/2);
 mkWall(R.d, R.h,  R.w/2, 0, Math.PI/2);
 
-var divider = new THREE.Mesh(new THREE.BoxGeometry(.1, R.h, R.d-2.0), new THREE.MeshStandardMaterial({color:0x495057, roughness:.9}));
+var divider = new THREE.Mesh(new THREE.BoxGeometry(.12, R.h, R.d-2.0), new THREE.MeshStandardMaterial({color:0x495057, roughness:.9}));
 divider.position.set(0, R.h/2, -1.0); scene.add(divider);
 
 // Hoops — FIBA
@@ -120,7 +133,7 @@ function cam(x,z,ry){
   g.position.set(x, 4.6, z); g.rotation.y = ry;
   scene.add(g);
 }
-cam(-3.2,-5.3,.35); cam(3.2,-5.3,-.35);
+cam(-5.2,-5.3,.35); cam(5.2,-5.3,-.35);
 
 // Players for scale (1.95 m)
 function player(x,z){
@@ -131,19 +144,19 @@ function player(x,z){
   head.position.y = 1.82; g.add(head);
   g.position.set(x,0,z); scene.add(g);
 }
-player(LANE_X[0], FT_Z-0.35); player(LANE_X[1], TP_APEX+0.15);
+player(LANE_X[0]-0.8, FT_Z-0.35); player(LANE_X[1]+0.8, TP_APEX+0.15);
 
 // Shared front zone (z ≈ 4.2..6)
 var cab = new THREE.Mesh(new THREE.BoxGeometry(1.5,2.2,1.1), new THREE.MeshStandardMaterial({color:0x3b3b4f, roughness:.95}));
-cab.position.set(-2.6, 1.1, 5.1); scene.add(cab);
+cab.position.set(-4.4, 1.1, 5.1); scene.add(cab);
 var curtain = new THREE.Mesh(new THREE.BoxGeometry(1.4,2.1,.05), new THREE.MeshStandardMaterial({color:0x6741d9, roughness:.9, transparent:true, opacity:.55}));
-curtain.position.set(-2.55, 1.08, 4.5); scene.add(curtain);
+curtain.position.set(-4.35, 1.08, 4.5); scene.add(curtain);
 
 var rack = new THREE.Mesh(new THREE.BoxGeometry(2.0,.95,.55), new THREE.MeshStandardMaterial({color:0xf0b400, metalness:.3, roughness:.5}));
-rack.position.set(2.5,.48,5.15); scene.add(rack);
+rack.position.set(4.3,.48,5.15); scene.add(rack);
 for(var i=0;i<6;i++){
   var ball = new THREE.Mesh(new THREE.SphereGeometry(.1215,16,16), new THREE.MeshStandardMaterial({color:0xe8590c, roughness:.7}));
-  ball.position.set(2.5-0.8+(i%3)*0.8, .99, 5.15 + (i<3?-0.1:0.1));
+  ball.position.set(4.3-0.8+(i%3)*0.8, .99, 5.15 + (i<3?-0.1:0.1));
   scene.add(ball);
 }
 
@@ -153,14 +166,14 @@ var scr = new THREE.Mesh(new THREE.BoxGeometry(1.55,.85,.02), new THREE.MeshBasi
 scr.position.set(0,2.3, R.d/2-.19); scene.add(scr);
 
 var station = new THREE.Mesh(new THREE.BoxGeometry(.75,.95,.5), new THREE.MeshStandardMaterial({color:0x868e96, roughness:.7}));
-station.position.set(2.9,.48,4.4); scene.add(station);
+station.position.set(4.7,.48,4.4); scene.add(station);
 
 var door = new THREE.Mesh(new THREE.BoxGeometry(1.0,2.1,.08), new THREE.MeshStandardMaterial({color:0x0c8599, roughness:.6}));
 door.position.set(-1.2,1.05,R.d/2-.1); scene.add(door);
 
 var benchMat = new THREE.MeshStandardMaterial({color:0x495057, roughness:.8});
-var b=new THREE.Mesh(new THREE.BoxGeometry(1.6,.08,.4),benchMat); b.position.set(-0.3,.45,5.2); scene.add(b);
-var l1=new THREE.Mesh(new THREE.BoxGeometry(.08,.45,.4),benchMat); l1.position.set(-1.0,.22,5.2); scene.add(l1);
+var b=new THREE.Mesh(new THREE.BoxGeometry(1.8,.08,.4),benchMat); b.position.set(-0.4,.45,5.2); scene.add(b);
+var l1=new THREE.Mesh(new THREE.BoxGeometry(.08,.45,.4),benchMat); l1.position.set(-1.2,.22,5.2); scene.add(l1);
 var l2=l1.clone(); l2.position.x=0.4; scene.add(l2);
 
 // Reference ball on 3pt apex
@@ -175,15 +188,15 @@ function labelSprite(text,fg,scale,pos){
   var sp=new THREE.Sprite(new THREE.SpriteMaterial({map:t, transparent:true}));
   sp.scale.set(scale[0],scale[1],1); sp.position.set(pos[0],pos[1],pos[2]); scene.add(sp);
 }
-labelSprite('Freiwurf 5,80 m','#f1e4c3',[2.4,.6],[LANE_X[0],.25,FT_Z]);
-labelSprite('3er 6,75 m (Bogen)','#ffa94d',[2.4,.6],[LANE_X[1],.25,TP_APEX]);
-labelSprite('Zone 5,80 m','#dee2e6',[1.9,.48],[LANE_X[0],.25,END+2.9]);
-labelSprite('Lane 1','#74c0fc',[1.5,.38],[LANE_X[0],4.6,-3]);
-labelSprite('Lane 2','#74c0fc',[1.5,.38],[LANE_X[1],4.6,-3]);
-labelSprite('Raum: 7 × 12 m = 84 m²','#ff922b',[3.2,.8],[0,.3,4.4]);
-labelSprite('Anlauf hinter 3er: 3,7 m','#8ce99a',[2.6,.65],[0,.25,3.6]);
-labelSprite('Umziehen','#b197fc',[1.7,.42],[-2.6,2.8,4.9]);
-labelSprite('Ballregal (Size 7)','#ffd43b',[1.9,.48],[2.5,1.5,5.15]);
+labelSprite('Freiwurf 5,80 m','#f1e4c3',[2.4,.6],[LANE_X[0]-0.6,.25,FT_Z]);
+labelSprite('3er 6,75 m (Bogen)','#ffa94d',[2.4,.6],[LANE_X[1]+0.6,.25,TP_APEX]);
+labelSprite('Zone 4,90 × 5,80 (FIBA, komplett)','#dee2e6',[3.6,.9],[LANE_X[0],.25,END+2.9]);
+labelSprite('Lane 1 — 5,3 m breit','#74c0fc',[3,.75],[LANE_X[0],4.7,-3]);
+labelSprite('Lane 2 — 5,3 m breit','#74c0fc',[3,.75],[LANE_X[1],4.7,-3]);
+labelSprite('Raum: 11 × 12 m = 132 m²','#ff922b',[3.4,.85],[0,.3,4.2]);
+labelSprite('Anlauf hinter 3er: 3,7 m','#8ce99a',[2.6,.65],[0,.25,3.5]);
+labelSprite('Umziehen','#b197fc',[1.7,.42],[-4.4,2.8,4.9]);
+labelSprite('Ballregal (Size 7)','#ffd43b',[1.9,.48],[4.3,1.5,5.15]);
 labelSprite('Leaderboard','#38d9a9',[1.7,.42],[0,3.05,R.d/2-.2]);
 labelSprite('Smart Lock','#66d9e8',[1.4,.35],[-1.2,2.35,R.d/2-.2]);
 labelSprite('Ring 3,05 m · ⌀ 45 cm','#ff922b',[2.5,.62],[0,3.75,END+1.2]);
@@ -192,8 +205,8 @@ scene.add(new THREE.AmbientLight(0xffffff,.6));
 var key = new THREE.DirectionalLight(0xffffff,.9); key.position.set(6,10,6); scene.add(key);
 var fill = new THREE.PointLight(0xffe8cc,.5); fill.position.set(-4,4,4); scene.add(fill);
 
-var camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, .1, 120);
-camera.position.set(9, 8, 12);
+var camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, .1, 150);
+camera.position.set(13, 9, 14);
 var renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio || 1);
