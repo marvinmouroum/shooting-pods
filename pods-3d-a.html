@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Shooting Lanes 3D — FIBA-Maße, 132 m²</title>
+<style>
+  body { margin:0; overflow:hidden; font-family:-apple-system,Arial,sans-serif; background:#111; }
+  #info { position:fixed; top:12px; left:12px; color:#fff; background:rgba(0,0,0,.55); padding:10px 14px; border-radius:10px; font-size:13px; line-height:1.5; z-index:10; }
+  #info b { color:#ff922b; }
+  canvas { display:block; }
+  #legend { position:fixed; bottom:12px; left:12px; color:#ddd; background:rgba(0,0,0,.55); padding:8px 12px; border-radius:10px; font-size:11px; z-index:10; max-width:70%; }
+</style>
+</head>
+<body>
+<div id="info"><b>🏀 Variante A — Rebound-Maschine (132 m²)</b><br>2 Bahnen je 5,3 × 10 m · Variante B mit Ballrücklauf: <a href="pods-3d-b.html" style="color:#66d9e8">hier vergleichen</a></div>
+<div id="legend">FIBA: Brett 1,80×1,05 · Ring ⌀ 45 cm / 3,05 m · Zone 4,90×5,80 m (passt komplett in die Lane!) · FT 5,80 m · FT-Kreis r 1,80 · No-charge r 1,25 · 3er 6,75 m · Ball Size 7 ⌀ 24,3 cm. Weiß = Freiwurf/Zone · Orange = Dreier.</div>
+<script src="three.min.js"></script>
+<script src="OrbitControls-global.js"></script>
+<script>
+// Scale: 1 unit = 1 m. Room 11 m wide (x) × 12 m deep (z), 5 m ceiling = 132 m².
+var R = { w:11, d:12, h:5 };
+var LANE_X = [-2.85, 2.85];  // lane centers (5.3 m lanes + 0.4 divider gap)
+var LANE_HW = 2.65;          // lane half-width
+var END = -R.d/2;            // end wall z = -6
+var RIM_Z = END + 1.575;     // rim center z = -4.425
+var FT_Z  = END + 5.80;      // FT line z = -0.2
+var TP_APEX = RIM_Z + 6.75;  // 3pt arc apex z = 2.325
+
+var scene = new THREE.Scene();
+scene.background = new THREE.Color(0x15181e);
+
+var floor = new THREE.Mesh(new THREE.BoxGeometry(R.w, .1, R.d), new THREE.MeshStandardMaterial({ color:0xc9a26a, roughness:.9 }));
+floor.position.y = -.05; scene.add(floor);
+
+function mark(w,d,x,z,color){
+  var m = new THREE.Mesh(new THREE.BoxGeometry(w,.006,d), new THREE.MeshBasicMaterial({color:color||0xffffff}));
+  m.position.set(x, .012, z); scene.add(m); return m;
+}
+// Arc made of short floor segments, clipped to given angle range.
+// Point = (cx + r*sin(a), cz + r*cos(a)); a=0 bulges toward +z (away from hoop).
+function arcSegments(cx, cz, r, a0, a1, color){
+  var steps = Math.max(10, Math.ceil(Math.abs(a1-a0)/0.04));
+  var prev = null;
+  for(var i=0;i<=steps;i++){
+    var a = a0 + (a1-a0)*i/steps;
+    var px = cx + r*Math.sin(a), pz = cz + r*Math.cos(a);
+    if(prev){
+      var dx=px-prev[0], dz=pz-prev[1];
+      var len=Math.sqrt(dx*dx+dz*dz);
+      var m=new THREE.Mesh(new THREE.BoxGeometry(len,.006,.06), new THREE.MeshBasicMaterial({color:color||0xffffff}));
+      m.position.set((px+prev[0])/2,.012,(pz+prev[1])/2);
+      m.rotation.y = -Math.atan2(dz,dx);
+      scene.add(m);
+    }
+    prev=[px,pz];
+  }
+}
+
+LANE_X.forEach(function(x){
+  // Baseline
+  mark(5.2,.05, x, END+0.04);
+  // FIBA Zone: 4.90 m wide × 5.80 m deep — fits fully in 5.3 m lane
+  mark(4.90,.05, x, FT_Z);                     // zone front = FT line
+  mark(.05,5.80, x-2.45, END+2.90);            // zone edge left
+  mark(.05,5.80, x+2.45, END+2.90);            // zone edge right
+  // FT circle r=1.80: semicircle bulging away from hoop (fits: 1.80 < 2.45)
+  arcSegments(x, FT_Z, 1.80, -Math.PI/2, Math.PI/2, 0xffffff);
+  // No-charge semicircle r=1.25 around rim
+  arcSegments(x, RIM_Z, 1.25, -Math.PI/2, Math.PI/2, 0xffffff);
+  // 3-point arc r=6.75 around rim center, clipped at lane edges
+  var aMax = Math.asin((LANE_HW-0.1)/6.75);
+  arcSegments(x, RIM_Z, 6.75, -aMax, aMax, 0xffa94d);
+  // straight corner stubs from arc ends down to baseline
+  var endZ = RIM_Z + 6.75*Math.cos(aMax);
+  mark(.05, endZ-(END+0.06), x-(LANE_HW-0.1), (endZ+END+0.06)/2, 0xffa94d);
+  mark(.05, endZ-(END+0.06), x+(LANE_HW-0.1), (endZ+END+0.06)/2, 0xffa94d);
+});
+
+// Walls
+var wallMat = new THREE.MeshStandardMaterial({ color:0x2b3440, roughness:.95, transparent:true, opacity:.4, side:THREE.DoubleSide });
+function mkWall(w,h,x,z,ry){
+  var m = new THREE.Mesh(new THREE.BoxGeometry(w,h,.15),wallMat);
+  m.position.set(x,h/2,z); if(ry) m.rotation.y=ry; scene.add(m);
+}
+mkWall(R.w, R.h, 0, -R.d/2);
+mkWall(R.w, R.h, 0,  R.d/2);
+mkWall(R.d, R.h, -R.w/2, 0, Math.PI/2);
+mkWall(R.d, R.h,  R.w/2, 0, Math.PI/2);
+
+var divider = new THREE.Mesh(new THREE.BoxGeometry(.12, R.h, R.d-2.0), new THREE.MeshStandardMaterial({color:0x495057, roughness:.9}));
+divider.position.set(0, R.h/2, -1.0); scene.add(divider);
+
+// Hoops — FIBA
+function hoop(x){
+  var g = new THREE.Group();
+  var board = new THREE.Mesh(new THREE.BoxGeometry(1.80,1.05,.05), new THREE.MeshStandardMaterial({color:0xf8f9fa, roughness:.4}));
+  board.position.set(0, 3.425, END+1.175); g.add(board);
+  var sq = new THREE.Mesh(new THREE.BoxGeometry(.59,.45,.01), new THREE.MeshStandardMaterial({color:0xff6b00, roughness:.5}));
+  sq.position.set(0, 3.13, END+1.20); g.add(sq);
+  var rim = new THREE.Mesh(new THREE.TorusGeometry(.225,.016,12,32), new THREE.MeshStandardMaterial({color:0xff6b00, metalness:.6, roughness:.3}));
+  rim.rotation.x = Math.PI/2;
+  rim.position.set(0, 3.05, RIM_Z); g.add(rim);
+  var net = new THREE.Mesh(new THREE.ConeGeometry(.19,.40,12,1,true), new THREE.MeshStandardMaterial({color:0xffffff, wireframe:true}));
+  net.rotation.x = Math.PI;   // narrow end down
+  net.position.set(0, 2.85, RIM_Z); g.add(net);
+  var arm = new THREE.Mesh(new THREE.BoxGeometry(.12,.12,.6), new THREE.MeshStandardMaterial({color:0x495057, metalness:.5}));
+  arm.position.set(0, 3.425, END+0.6); g.add(arm);
+  g.position.set(x, 0, 0);
+  scene.add(g);
+}
+hoop(LANE_X[0]); hoop(LANE_X[1]);
+
+// Rebound machines
+function machine(x){
+  var g = new THREE.Group();
+  var body = new THREE.Mesh(new THREE.BoxGeometry(1.1,1.1,.9), new THREE.MeshStandardMaterial({color:0x1971c2, roughness:.6}));
+  body.position.y=.85; g.add(body);
+  var screen = new THREE.Mesh(new THREE.BoxGeometry(1.0,.5,.05), new THREE.MeshStandardMaterial({color:0x0b3d70, emissive:0x0d3a61, roughness:.4}));
+  screen.position.set(0,1.35,.2); screen.rotation.x=-.5; g.add(screen);
+  var chute = new THREE.Mesh(new THREE.BoxGeometry(.5,.5,.5), new THREE.MeshStandardMaterial({color:0x1c7ed6, roughness:.6}));
+  chute.position.set(0,.5,.9); g.add(chute);
+  g.position.set(x, 0, RIM_Z-0.35);
+  scene.add(g);
+}
+machine(LANE_X[0]); machine(LANE_X[1]);
+
+// CV cameras
+function cam(x,z,ry){
+  var g = new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(.35,.2,.3), new THREE.MeshStandardMaterial({color:0x2b8a3e})));
+  var lens = new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,.1,16), new THREE.MeshStandardMaterial({color:0x111111, metalness:.7}));
+  lens.rotation.x = Math.PI/2; lens.position.z=.2; g.add(lens);
+  g.position.set(x, 4.6, z); g.rotation.y = ry;
+  scene.add(g);
+}
+cam(-5.2,-5.3,.35); cam(5.2,-5.3,-.35);
+
+// Players for scale (1.95 m)
+function player(x,z){
+  var g = new THREE.Group();
+  var body = new THREE.Mesh(new THREE.CylinderGeometry(.22,.22,1.5,12), new THREE.MeshStandardMaterial({color:0x845ef7, roughness:.6}));
+  body.position.y = 1.95/2 - 0.12; g.add(body);
+  var head = new THREE.Mesh(new THREE.SphereGeometry(.13,12,12), new THREE.MeshStandardMaterial({color:0xd0bfff, roughness:.6}));
+  head.position.y = 1.82; g.add(head);
+  g.position.set(x,0,z); scene.add(g);
+}
+player(LANE_X[0]-0.8, FT_Z-0.35); player(LANE_X[1]+0.8, TP_APEX+0.15);
+
+// Shared front zone (z ≈ 4.2..6)
+var cab = new THREE.Mesh(new THREE.BoxGeometry(1.5,2.2,1.1), new THREE.MeshStandardMaterial({color:0x3b3b4f, roughness:.95}));
+cab.position.set(-4.4, 1.1, 5.1); scene.add(cab);
+var curtain = new THREE.Mesh(new THREE.BoxGeometry(1.4,2.1,.05), new THREE.MeshStandardMaterial({color:0x6741d9, roughness:.9, transparent:true, opacity:.55}));
+curtain.position.set(-4.35, 1.08, 4.5); scene.add(curtain);
+
+var rack = new THREE.Mesh(new THREE.BoxGeometry(2.0,.95,.55), new THREE.MeshStandardMaterial({color:0xf0b400, metalness:.3, roughness:.5}));
+rack.position.set(4.3,.48,5.15); scene.add(rack);
+for(var i=0;i<6;i++){
+  var ball = new THREE.Mesh(new THREE.SphereGeometry(.1215,16,16), new THREE.MeshStandardMaterial({color:0xe8590c, roughness:.7}));
+  ball.position.set(4.3-0.8+(i%3)*0.8, .99, 5.15 + (i<3?-0.1:0.1));
+  scene.add(ball);
+}
+
+var mon = new THREE.Mesh(new THREE.BoxGeometry(1.7,1.0,.08), new THREE.MeshStandardMaterial({color:0x212529, emissive:0x22303f, roughness:.4}));
+mon.position.set(0,2.3, R.d/2-.15); scene.add(mon);
+var scr = new THREE.Mesh(new THREE.BoxGeometry(1.55,.85,.02), new THREE.MeshBasicMaterial({color:0x1c9c74}));
+scr.position.set(0,2.3, R.d/2-.19); scene.add(scr);
+
+var station = new THREE.Mesh(new THREE.BoxGeometry(.75,.95,.5), new THREE.MeshStandardMaterial({color:0x868e96, roughness:.7}));
+station.position.set(4.7,.48,4.4); scene.add(station);
+
+var door = new THREE.Mesh(new THREE.BoxGeometry(1.0,2.1,.08), new THREE.MeshStandardMaterial({color:0x0c8599, roughness:.6}));
+door.position.set(-1.2,1.05,R.d/2-.1); scene.add(door);
+
+var benchMat = new THREE.MeshStandardMaterial({color:0x495057, roughness:.8});
+var b=new THREE.Mesh(new THREE.BoxGeometry(1.8,.08,.4),benchMat); b.position.set(-0.4,.45,5.2); scene.add(b);
+var l1=new THREE.Mesh(new THREE.BoxGeometry(.08,.45,.4),benchMat); l1.position.set(-1.2,.22,5.2); scene.add(l1);
+var l2=l1.clone(); l2.position.x=0.4; scene.add(l2);
+
+// Reference ball on 3pt apex
+var refBall = new THREE.Mesh(new THREE.SphereGeometry(.1215,16,16), new THREE.MeshStandardMaterial({color:0xe8590c, roughness:.7}));
+refBall.position.set(0,.13,TP_APEX); scene.add(refBall);
+
+// Labels
+function labelSprite(text,fg,scale,pos){
+  var c=document.createElement('canvas'); c.width=512;c.height=128;
+  var x=c.getContext('2d'); x.font='bold 52px sans-serif'; x.fillStyle=fg; x.textAlign='center'; x.fillText(text,256,82);
+  var t=new THREE.CanvasTexture(c);
+  var sp=new THREE.Sprite(new THREE.SpriteMaterial({map:t, transparent:true}));
+  sp.scale.set(scale[0],scale[1],1); sp.position.set(pos[0],pos[1],pos[2]); scene.add(sp);
+}
+labelSprite('Freiwurf 5,80 m','#f1e4c3',[2.4,.6],[LANE_X[0]-0.6,.25,FT_Z]);
+labelSprite('3er 6,75 m (Bogen)','#ffa94d',[2.4,.6],[LANE_X[1]+0.6,.25,TP_APEX]);
+labelSprite('Zone 4,90 × 5,80 (FIBA, komplett)','#dee2e6',[3.6,.9],[LANE_X[0],.25,END+2.9]);
+labelSprite('Lane 1 — 5,3 m breit','#74c0fc',[3,.75],[LANE_X[0],4.7,-3]);
+labelSprite('Lane 2 — 5,3 m breit','#74c0fc',[3,.75],[LANE_X[1],4.7,-3]);
+labelSprite('Raum: 11 × 12 m = 132 m²','#ff922b',[3.4,.85],[0,.3,4.2]);
+labelSprite('Anlauf hinter 3er: 3,7 m','#8ce99a',[2.6,.65],[0,.25,3.5]);
+labelSprite('Umziehen','#b197fc',[1.7,.42],[-4.4,2.8,4.9]);
+labelSprite('Ballregal (Size 7)','#ffd43b',[1.9,.48],[4.3,1.5,5.15]);
+labelSprite('Leaderboard','#38d9a9',[1.7,.42],[0,3.05,R.d/2-.2]);
+labelSprite('Smart Lock','#66d9e8',[1.4,.35],[-1.2,2.35,R.d/2-.2]);
+labelSprite('Ring 3,05 m · ⌀ 45 cm','#ff922b',[2.5,.62],[0,3.75,END+1.2]);
+
+scene.add(new THREE.AmbientLight(0xffffff,.6));
+var key = new THREE.DirectionalLight(0xffffff,.9); key.position.set(6,10,6); scene.add(key);
+var fill = new THREE.PointLight(0xffe8cc,.5); fill.position.set(-4,4,4); scene.add(fill);
+
+var camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, .1, 150);
+camera.position.set(13, 9, 14);
+var renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio || 1);
+document.body.appendChild(renderer.domElement);
+var controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.target.set(0,1.5,0);
+controls.enableDamping = true; controls.dampingFactor = .08;
+controls.maxPolarAngle = Math.PI/2.05;
+window.addEventListener('resize',function(){ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+(function animate(){ requestAnimationFrame(animate); controls.update(); renderer.render(scene,camera); })();
+</script>
+</body>
+</html>
