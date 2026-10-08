@@ -13,7 +13,7 @@
 </head>
 <body>
 <div id="info"><b>🏀 Variante B — Ballrücklauf wie beim Bowling</b><br>Flacher Boden · Fangnetz + seitliche Rücklaufschiene + Förderer · 2 Ballregeln je Lane · Variante A: <a href="pods-3d-a.html" style="color:#66d9e8">Rebound-Maschine</a></div>
-<div id="legend">FIBA: Brett 1,80×1,05 · Ring ⌀ 45 cm / 3,05 m · Zone 4,90×5,80 m (passt komplett in die Lane!) · FT 5,80 m · FT-Kreis r 1,80 · No-charge r 1,25 · 3er 6,75 m · Ball Size 7 ⌀ 24,3 cm. Weiß = Freiwurf/Zone · Orange = Dreier · Blau = Fangnetz/Schiene · Gelb = Ballregeln. Boden bleibt flach (FIBA) — Bälle rollen über Fangnetz + Schiene + Förderer zurück.</div>
+<div id="legend">FIBA: Brett 1,80×1,05 · Ring ⌀ 45 cm / 3,05 m · Zone 4,90×5,80 m (passt komplett in die Lane!) · FT 5,80 m · FT-Kreis r 1,80 · No-charge r 1,25 · 3er 6,75 m · Ball Size 7 ⌀ 24,3 cm. Weiß = Freiwurf/Zone · Orange = Dreier · Blau = Fangnetz/Schiene · Gelb = Ballregeln. Boden bleibt flach (FIBA) — Bälle rollen über Fangnetz + Schiene + Förderer zurück. Schiene, Förderer und Ballregeln JE LANE BEIDSEITIG — Ballregeln auf Rollen (mobil, frei verschiebbar), sodass man von beiden Seiten werfen/nehmen kann.</div>
 <script src="three.min.js"></script>
 <script src="OrbitControls-global.js"></script>
 <script>
@@ -91,43 +91,60 @@ function catchNet(x){
 }
 catchNet(LANE_X[0]); catchNet(LANE_X[1]);
 
-// Seitliche Ruecklaufschiene je Lane (laeuft along z, an einer Seite)
+// Seitliche Ruecklaufschiene je Lane — JETZT BEIDSEITIG (Baelle kommen von jeder Seite zurueck)
 function rail(x){
   var g = new THREE.Group();
-  // Schienen-Kanal: 2 niedrige Seitenwaende, 10 m lang
-  var base = new THREE.Mesh(new THREE.BoxGeometry(.5,.06,10.4), new THREE.MeshStandardMaterial({color:0x343a40, roughness:.8}));
-  base.position.set(x+LANE_HW-0.35, .03, -0.8); g.add(base);
-  var w1 = new THREE.Mesh(new THREE.BoxGeometry(.05,.18,10.4), new THREE.MeshStandardMaterial({color:0x868e96, metalness:.4}));
-  w1.position.set(x+LANE_HW-0.12, .12, -0.8); g.add(w1);
-  var w2 = w1.clone(); w2.position.x = x+LANE_HW-0.58; g.add(w2);
-  g.position.set(0,0,0); scene.add(g);
+  [-1, 1].forEach(function(s){
+    var side = x + s*(LANE_HW-0.35);
+    var base = new THREE.Mesh(new THREE.BoxGeometry(.5,.06,10.4), new THREE.MeshStandardMaterial({color:0x343a40, roughness:.8}));
+    base.position.set(side, .03, -0.8); g.add(base);
+    var w1 = new THREE.Mesh(new THREE.BoxGeometry(.05,.18,10.4), new THREE.MeshStandardMaterial({color:0x868e96, metalness:.4}));
+    w1.position.set(side + s*0.23, .12, -0.8); g.add(w1);
+    var w2 = w1.clone(); w2.position.x = side - s*0.23; g.add(w2);
+  });
+  scene.add(g);
 }
 rail(LANE_X[0]); rail(LANE_X[1]);
 
-// Foerderer (Bowling-Aufzug) am Schienen-Ende vorn: hebt Baelle zur Ballregel
+// Foerderer (Bowling-Aufzug) am Schienen-Ende vorn: JEDE Seite bekommt einen
 function lifter(x){
   var g = new THREE.Group();
-  var belt = new THREE.Mesh(new THREE.BoxGeometry(.45,1.6,.5), new THREE.MeshStandardMaterial({color:0x1c7ed6, roughness:.6}));
-  belt.position.set(x+LANE_HW-0.35, .8, 4.6); belt.rotation.x = -0.35; g.add(belt);
-  var motor = new THREE.Mesh(new THREE.BoxGeometry(.5,.3,.4), new THREE.MeshStandardMaterial({color:0x1971c2, roughness:.5}));
-  motor.position.set(x+LANE_HW-0.35, .2, 4.6); g.add(motor);
-  g.position.set(0,0,0); scene.add(g);
+  [-1, 1].forEach(function(s){
+    var side = x + s*(LANE_HW-0.35);
+    var belt = new THREE.Mesh(new THREE.BoxGeometry(.45,1.6,.5), new THREE.MeshStandardMaterial({color:0x1c7ed6, roughness:.6}));
+    belt.position.set(side, .8, 4.6); belt.rotation.x = -0.35; belt.rotation.y = s>0?0:Math.PI; g.add(belt);
+    var motor = new THREE.Mesh(new THREE.BoxGeometry(.5,.3,.4), new THREE.MeshStandardMaterial({color:0x1971c2, roughness:.5}));
+    motor.position.set(side, .2, 4.6); g.add(motor);
+  });
+  scene.add(g);
 }
 lifter(LANE_X[0]); lifter(LANE_X[1]);
 
-// Ballregel Nr. 2 vorn je Lane (die erste ist die Rebound-Maschine als Premium-Modus)
+// Rollbare Ballregeln — BEIDSEITIG je Lane, auf Rollen (mobil, frei platzierbar)
+// Zweiteiliger Standfuss + sichtbare Lenkrollen = verschiebbar fuer Links-/Rechts-Shooter
 function ballRack2(x){
-  var rack = new THREE.Mesh(new THREE.BoxGeometry(.9,.9,.55), new THREE.MeshStandardMaterial({color:0xf0b400, metalness:.3, roughness:.5}));
-  rack.position.set(x+LANE_HW-0.9, .45, 4.15); scene.add(rack);
-  for(var i=0;i<3;i++){
-    var ball = new THREE.Mesh(new THREE.SphereGeometry(.1215,12,12), new THREE.MeshStandardMaterial({color:0xe8590c, roughness:.7}));
-    ball.position.set(x+LANE_HW-0.9, .95, 4.15+(i-1)*0.24); scene.add(ball);
-  }
+  [-1, 1].forEach(function(s){
+    var side = x + s*(LANE_HW-0.9);
+    var g = new THREE.Group();
+    var rack = new THREE.Mesh(new THREE.BoxGeometry(.9,.9,.55), new THREE.MeshStandardMaterial({color:0xf0b400, metalness:.3, roughness:.5}));
+    rack.position.set(side, .55, 4.15); g.add(rack);
+    for(var i=0;i<3;i++){
+      var ball = new THREE.Mesh(new THREE.SphereGeometry(.1215,12,12), new THREE.MeshStandardMaterial({color:0xe8590c, roughness:.7}));
+      ball.position.set(side, 1.05, 4.15+(i-1)*0.24); g.add(ball);
+    }
+    // Rollen (mobil)
+    [[-.32,-.18],[.32,-.18],[-.32,.18],[.32,.18]].forEach(function(w){
+      var caster = new THREE.Mesh(new THREE.CylinderGeometry(.07,.07,.05,12), new THREE.MeshStandardMaterial({color:0x212529, roughness:.5}));
+      caster.rotation.x = Math.PI/2;
+      caster.position.set(side + w[0], .07, 4.15 + w[1]); g.add(caster);
+    });
+    scene.add(g);
+  });
 }
 ballRack2(LANE_X[0]); ballRack2(LANE_X[1]);
 
-// Ein paar Baelle in der Schiene (Roll-Zustand)
-[[LANE_X[0],2.5],[LANE_X[1],1.0],[LANE_X[0],-1.5],[LANE_X[1],-2.5]].forEach(function(p){
+// Ein paar Baelle in beiden Schienen (Roll-Zustand)
+[[LANE_X[0]+LANE_HW-0.35,2.5],[LANE_X[1]+LANE_HW-0.35,1.0],[LANE_X[0]-LANE_HW+0.35,-1.5],[LANE_X[1]-LANE_HW+0.35,-2.5]].forEach(function(p){
   var b = new THREE.Mesh(new THREE.SphereGeometry(.1215,12,12), new THREE.MeshStandardMaterial({color:0xe8590c, roughness:.7}));
   b.position.set(p[0]+LANE_HW-0.35, .1, p[1]); scene.add(b);
 });
